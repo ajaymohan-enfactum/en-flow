@@ -1,36 +1,54 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { FollowupBadge, ConfidenceBadge, StageBadge, StuckBadge } from '@/components/StatusBadges';
-import { formatSGD, formatPercent, formatDate } from '@/lib/format';
+import { formatSGD, formatPercent } from '@/lib/format';
 import { mockOpportunities, mockTasks, mockActivities, mockArtifacts, mockStageHistory, getUserById, getAccountById, getStageRule } from '@/data/mockData';
-import { STAGES_ORDERED, getEffectiveProbability, getWeightedValue, getFollowupStatus, getConfidenceScore, getStageAgeDays } from '@/types';
+import { STAGES_ORDERED, Stage, Opportunity, getEffectiveProbability, getWeightedValue, getFollowupStatus, getConfidenceScore, getStageAgeDays } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { LayoutGrid, Table as TableIcon, Search, Plus } from 'lucide-react';
+import { LayoutGrid, Table as TableIcon, Search, Plus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useDroppable } from '@dnd-kit/core';
+import { toast } from 'sonner';
 
 type ViewMode = 'kanban' | 'table';
+
+function enrichOpp(opp: Opportunity) {
+  return {
+    ...opp,
+    account: getAccountById(opp.account_id),
+    owner: getUserById(opp.opportunity_owner_user_id),
+    relOwner: opp.relationship_owner_user_id ? getUserById(opp.relationship_owner_user_id) : undefined,
+    effectiveProb: getEffectiveProbability(opp),
+    weightedEffective: getWeightedValue(opp),
+    followup: getFollowupStatus(mockTasks, opp.id),
+    confidence: getConfidenceScore(opp, mockTasks, mockActivities, mockArtifacts, getStageRule(opp.stage)),
+    stageAge: getStageAgeDays(opp, mockStageHistory),
+    stageRule: getStageRule(opp.stage),
+    nextTask: mockTasks.filter(t => t.opportunity_id === opp.id && t.status === 'Open').sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0],
+  };
+}
 
 export default function Pipeline() {
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('all');
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(() => [...mockOpportunities]);
 
-  const enrichedOpps = useMemo(() => {
-    return mockOpportunities.map(opp => ({
-      ...opp,
-      account: getAccountById(opp.account_id),
-      owner: getUserById(opp.opportunity_owner_user_id),
-      relOwner: opp.relationship_owner_user_id ? getUserById(opp.relationship_owner_user_id) : undefined,
-      effectiveProb: getEffectiveProbability(opp),
-      weightedEffective: getWeightedValue(opp),
-      followup: getFollowupStatus(mockTasks, opp.id),
-      confidence: getConfidenceScore(opp, mockTasks, mockActivities, mockArtifacts, getStageRule(opp.stage)),
-      stageAge: getStageAgeDays(opp, mockStageHistory),
-      stageRule: getStageRule(opp.stage),
-      nextTask: mockTasks.filter(t => t.opportunity_id === opp.id && t.status === 'Open').sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0],
-    }));
-  }, []);
+  const enrichedOpps = useMemo(() => opportunities.map(enrichOpp), [opportunities]);
 
   const filtered = useMemo(() => {
     let result = enrichedOpps;
@@ -47,6 +65,22 @@ export default function Pipeline() {
     }
     return result;
   }, [enrichedOpps, search, stageFilter]);
+
+  const handleStageChange = useCallback((oppId: string, newStage: Stage) => {
+    setOpportunities(prev => prev.map(opp => {
+      if (opp.id !== oppId) return opp;
+      const rule = getStageRule(newStage);
+      const newProb = rule?.default_probability ?? opp.probability_system;
+      return {
+        ...opp,
+        stage: newStage,
+        probability_system: newProb,
+        probability_override: undefined,
+        probability_override_reason: undefined,
+        updated_at: new Date().toISOString(),
+      };
+    }));
+  }, []);
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-4 animate-fade-in">
@@ -89,65 +123,177 @@ export default function Pipeline() {
         </div>
       </div>
 
-      {viewMode === 'kanban' ? <KanbanView opps={filtered} /> : <PipelineTable opps={filtered} />}
+      {viewMode === 'kanban' ? <KanbanView opps={filtered} onStageChange={handleStageChange} /> : <PipelineTable opps={filtered} />}
     </div>
   );
 }
 
-function KanbanView({ opps }: { opps: any[] }) {
+/* ─── Kanban with Drag & Drop ─── */
+
+function KanbanView({ opps, onStageChange }: { opps: any[]; onStageChange: (oppId: string, newStage: Stage) => void }) {
   const kanbanStages = STAGES_ORDERED.filter(s => !['Closed', 'Lost'].includes(s));
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const activeOpp = activeId ? opps.find(o => o.id === activeId) : null;
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const oppId = active.id as string;
+    const opp = opps.find(o => o.id === oppId);
+    if (!opp) return;
+
+    // The over target is either a column id (stage name) or another card
+    let targetStage: Stage | undefined;
+
+    // Check if dropped over a column
+    if (kanbanStages.includes(over.id as Stage)) {
+      targetStage = over.id as Stage;
+    } else {
+      // Dropped over another card — find which stage that card is in
+      const overOpp = opps.find(o => o.id === over.id);
+      if (overOpp) targetStage = overOpp.stage;
+    }
+
+    if (targetStage && targetStage !== opp.stage) {
+      const rule = getStageRule(targetStage);
+      onStageChange(oppId, targetStage);
+      toast.success(`Moved "${opp.opportunity_title}" to ${targetStage}`, {
+        description: rule ? `Probability updated to ${(rule.default_probability * 100).toFixed(0)}%` : undefined,
+      });
+    }
+  };
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-4">
-      {kanbanStages.map(stage => {
-        const stageOpps = opps.filter((o: any) => o.stage === stage);
-        const totalValue = stageOpps.reduce((s: number, o: any) => s + o.est_value_sgd, 0);
-        return (
-          <div key={stage} className="kanban-column">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/30">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <StageBadge stage={stage} />
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1">{stageOpps.length} deals · {formatSGD(totalValue)}</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {stageOpps.map((opp: any) => (
-                <Link key={opp.id} to={`/opportunity/${opp.id}`} className="block">
-                  <div className="kanban-card">
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <p className="text-sm font-medium leading-tight">{opp.opportunity_title}</p>
-                      <ConfidenceBadge score={opp.confidence} />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mb-2">{opp.account?.account_name}</p>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold sgd-value">{formatSGD(opp.est_value_sgd)}</span>
-                      <span className="text-[11px] text-muted-foreground font-mono">{formatPercent(opp.effectiveProb)}</span>
-                    </div>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <FollowupBadge status={opp.followup} />
-                      {opp.stageRule && <StuckBadge stageAgeDays={opp.stageAge} slaDays={opp.stageRule.sla_days_in_stage} />}
-                    </div>
-                    {opp.nextTask && (
-                      <p className="text-[10px] text-muted-foreground mt-1.5 truncate">
-                        → {opp.nextTask.title}
-                      </p>
-                    )}
-                    <p className="text-[10px] text-muted-foreground mt-1">{opp.owner?.name}</p>
-                  </div>
-                </Link>
-              ))}
-              {stageOpps.length === 0 && (
-                <p className="text-[11px] text-muted-foreground text-center py-8 opacity-50">No deals</p>
-              )}
-            </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex gap-3 overflow-x-auto pb-4">
+        {kanbanStages.map(stage => {
+          const stageOpps = opps.filter((o: any) => o.stage === stage);
+          return (
+            <KanbanColumn key={stage} stage={stage} opps={stageOpps} />
+          );
+        })}
+      </div>
+      <DragOverlay dropAnimation={{ duration: 200, easing: 'ease' }}>
+        {activeOpp ? <KanbanCardContent opp={activeOpp} isDragging /> : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+function KanbanColumn({ stage, opps }: { stage: Stage; opps: any[] }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const totalValue = opps.reduce((s: number, o: any) => s + o.est_value_sgd, 0);
+  const oppIds = opps.map(o => o.id);
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'kanban-column transition-all duration-200',
+        isOver && 'ring-2 ring-primary/50 bg-primary/5'
+      )}
+    >
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/30">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <StageBadge stage={stage} />
           </div>
-        );
-      })}
+          <p className="text-[11px] text-muted-foreground mt-1">{opps.length} deals · {formatSGD(totalValue)}</p>
+        </div>
+      </div>
+      <SortableContext items={oppIds} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2 min-h-[60px]">
+          {opps.map((opp: any) => (
+            <SortableKanbanCard key={opp.id} opp={opp} />
+          ))}
+          {opps.length === 0 && (
+            <p className="text-[11px] text-muted-foreground text-center py-8 opacity-50">Drop deals here</p>
+          )}
+        </div>
+      </SortableContext>
     </div>
   );
 }
+
+function SortableKanbanCard({ opp }: { opp: any }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: opp.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <KanbanCardContent opp={opp} dragListeners={listeners} />
+    </div>
+  );
+}
+
+function KanbanCardContent({ opp, isDragging, dragListeners }: { opp: any; isDragging?: boolean; dragListeners?: any }) {
+  return (
+    <div className={cn('kanban-card group', isDragging && 'ring-2 ring-primary shadow-lg shadow-primary/20 rotate-1')}>
+      <div className="flex items-start gap-1.5">
+        <button
+          className="mt-0.5 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-grab active:cursor-grabbing transition-opacity flex-shrink-0 text-muted-foreground"
+          {...dragListeners}
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-1.5">
+            <Link to={`/opportunity/${opp.id}`} className="text-sm font-medium leading-tight hover:text-primary transition-colors" onClick={e => isDragging && e.preventDefault()}>
+              {opp.opportunity_title}
+            </Link>
+            <ConfidenceBadge score={opp.confidence} />
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">{opp.account?.account_name}</p>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold sgd-value">{formatSGD(opp.est_value_sgd)}</span>
+            <span className="text-[11px] text-muted-foreground font-mono">{formatPercent(opp.effectiveProb)}</span>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            <FollowupBadge status={opp.followup} />
+            {opp.stageRule && <StuckBadge stageAgeDays={opp.stageAge} slaDays={opp.stageRule.sla_days_in_stage} />}
+          </div>
+          {opp.nextTask && (
+            <p className="text-[10px] text-muted-foreground mt-1.5 truncate">
+              → {opp.nextTask.title}
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground mt-1">{opp.owner?.name}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Table View ─── */
 
 function PipelineTable({ opps }: { opps: any[] }) {
   return (
