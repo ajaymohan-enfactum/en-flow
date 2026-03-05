@@ -12,6 +12,7 @@ import Accounts from "./pages/Accounts";
 import AccountDetail from "./pages/AccountDetail";
 import PitchLibrary from "./pages/PitchLibrary";
 import Reports from "./pages/Reports";
+import AdminSettings from "./pages/AdminSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/accounts/:id" element={<AccountDetail />} />
               <Route path="/pitch-library" element={<PitchLibrary />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/admin" element={<AdminSettings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
