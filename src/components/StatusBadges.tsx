@@ -12,8 +12,7 @@ export function FollowupBadge({ status }: FollowupBadgeProps) {
     OK: 'success',
     None: 'secondary',
   };
-
-  return <Badge variant={variantMap[status]}>{status}</Badge>;
+  return <Badge variant={variantMap[status]} className="text-[10px] px-1.5 py-0">{status}</Badge>;
 }
 
 interface ConfidenceBadgeProps {
@@ -22,25 +21,30 @@ interface ConfidenceBadgeProps {
 
 export function ConfidenceBadge({ score }: ConfidenceBadgeProps) {
   const variant = score >= 80 ? 'success' : score >= 50 ? 'warning' : 'destructive';
-  return <Badge variant={variant}>{score}</Badge>;
+  return <Badge variant={variant} className="text-[10px] px-1.5 py-0 font-mono">{score}</Badge>;
 }
 
 interface StageBadgeProps {
   stage: string;
 }
 
-const STAGE_VARIANT: Record<string, 'default' | 'info' | 'secondary' | 'warning' | 'success' | 'destructive'> = {
-  'Prospect': 'default',
-  'Secured lead': 'info',
-  'Pitching': 'secondary',
-  'Proposal sent': 'warning',
-  'Cold, follow up later': 'secondary',
-  'Closed': 'success',
-  'Lost': 'destructive',
+const STAGE_COLORS: Record<string, string> = {
+  'Prospect': 'bg-[hsl(var(--stage-prospect))]',
+  'Secured lead': 'bg-[hsl(var(--stage-secured))]',
+  'Pitching': 'bg-[hsl(var(--stage-pitching))]',
+  'Proposal sent': 'bg-[hsl(var(--stage-proposal))]',
+  'Cold, follow up later': 'bg-[hsl(var(--stage-cold))]',
+  'Closed': 'bg-[hsl(var(--stage-closed))]',
+  'Lost': 'bg-[hsl(var(--stage-lost))]',
 };
 
 export function StageBadge({ stage }: StageBadgeProps) {
-  return <Badge variant={STAGE_VARIANT[stage] || 'outline'}>{stage}</Badge>;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium`}>
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STAGE_COLORS[stage] || 'bg-muted-foreground'}`} />
+      {stage}
+    </span>
+  );
 }
 
 interface StuckBadgeProps {
@@ -50,5 +54,5 @@ interface StuckBadgeProps {
 
 export function StuckBadge({ stageAgeDays, slaDays }: StuckBadgeProps) {
   if (stageAgeDays <= slaDays) return null;
-  return <Badge variant="destructive">Stuck {stageAgeDays}d</Badge>;
+  return <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Stuck {stageAgeDays}d</Badge>;
 }
