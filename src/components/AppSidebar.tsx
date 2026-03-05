@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { mockUsers } from '@/data/mockData';
@@ -106,11 +107,19 @@ export function AppSidebar() {
             )}
             <NavLink
               to="/admin"
-              className={cn('nav-item', location.pathname.startsWith('/admin') && 'active')}
+              className={cn('nav-item', location.pathname === '/admin' && 'active')}
               title={collapsed ? 'Admin Settings' : undefined}
             >
               <Settings className="h-4 w-4 flex-shrink-0" />
               {!collapsed && <span>Settings</span>}
+            </NavLink>
+            <NavLink
+              to="/admin/import"
+              className={cn('nav-item', location.pathname === '/admin/import' && 'active')}
+              title={collapsed ? 'Import Tool' : undefined}
+            >
+              <Upload className="h-4 w-4 flex-shrink-0" />
+              {!collapsed && <span>Import</span>}
             </NavLink>
           </>
         )}
