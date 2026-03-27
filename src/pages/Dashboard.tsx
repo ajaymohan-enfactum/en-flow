@@ -171,10 +171,23 @@ export default function Dashboard() {
   // ─── MDF Tracker ───
   const mdfStats = useMemo(() => {
     const mdfDeals = deals.filter(d => d.mdf_eligible && d.stage && !['Lost'].includes(d.stage));
+    const estimatedMdf = mdfDeals.reduce((s, d) => s + (d.mdf_amount ?? 0), 0);
+    // Avg MDF-adjusted GP%: (gross_profit + mdf_amount) / revenue * 100
+    const dealsWithRevenue = mdfDeals.filter(d => (d.margin_revenue ?? 0) > 0);
+    const avgMdfAdjustedGp = dealsWithRevenue.length > 0
+      ? dealsWithRevenue.reduce((s, d) => {
+          const gp = d.gross_profit ?? d.margin_gp ?? 0;
+          const mdf = d.mdf_amount ?? 0;
+          const rev = d.margin_revenue ?? 1;
+          return s + ((gp + mdf) / rev) * 100;
+        }, 0) / dealsWithRevenue.length
+      : null;
     return {
       count: mdfDeals.length,
       pipelineValue: mdfDeals.reduce((s, d) => s + (d.value ?? 0), 0),
-      estimatedMdf: mdfDeals.reduce((s, d) => s + (d.mdf_amount ?? 0), 0),
+      estimatedMdf,
+      avgMdfAdjustedGp,
+      dealsWithRevenue: dealsWithRevenue.length,
     };
   }, [deals]);
 
@@ -378,7 +391,7 @@ export default function Dashboard() {
               <p className="section-label">MDF-Eligible Pipeline</p>
               <p className="text-lg font-bold sgd-value mt-0.5">{formatSGD(mdfStats.pipelineValue)}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="section-label">MDF Deals</p>
                 <p className="text-sm font-semibold mt-0.5">{mdfStats.count}</p>
@@ -386,6 +399,15 @@ export default function Dashboard() {
               <div>
                 <p className="section-label">Estimated MDF</p>
                 <p className="sgd-value font-semibold mt-0.5 text-sm">{formatSGD(mdfStats.estimatedMdf)}</p>
+              </div>
+              <div>
+                <p className="section-label">Avg MDF-Adj GP%</p>
+                <p className={`text-sm font-semibold mt-0.5 ${mdfStats.avgMdfAdjustedGp != null && mdfStats.avgMdfAdjustedGp >= 20 ? 'text-emerald-400' : mdfStats.avgMdfAdjustedGp != null && mdfStats.avgMdfAdjustedGp >= 12 ? 'text-amber-400' : 'text-destructive'}`}>
+                  {mdfStats.avgMdfAdjustedGp != null ? `${mdfStats.avgMdfAdjustedGp.toFixed(1)}%` : '—'}
+                </p>
+                {mdfStats.dealsWithRevenue > 0 && (
+                  <p className="text-[10px] text-muted-foreground">{mdfStats.dealsWithRevenue} deals</p>
+                )}
               </div>
             </div>
           </div>
