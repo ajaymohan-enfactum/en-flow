@@ -4,6 +4,7 @@ import { FollowupBadge, ConfidenceBadge, StageBadge, StuckBadge } from '@/compon
 import { formatSGD, formatPercent } from '@/lib/format';
 import { useDeals, useUpdateDeal } from '@/hooks/useDeals';
 import { STAGES_ORDERED, Stage } from '@/types';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LayoutGrid, Table as TableIcon, Search, Plus, GripVertical } from 'lucide-react';
