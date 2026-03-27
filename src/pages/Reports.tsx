@@ -13,6 +13,7 @@ import { KPISlide } from '@/components/narrative/slides/KPISlide';
 import { FunnelSlide } from '@/components/narrative/slides/FunnelSlide';
 import { TopDealsSlide } from '@/components/narrative/slides/TopDealsSlide';
 import { WinLossSlide } from '@/components/narrative/slides/WinLossSlide';
+import { MDFSlide } from '@/components/narrative/slides/MDFSlide';
 import { format } from 'date-fns';
 
 export default function Reports() {
@@ -65,7 +66,7 @@ export default function Reports() {
     setCommentary(prev => ({ ...prev, [slideIdx]: value }));
   }, []);
 
-  const TOTAL_SLIDES = 5;
+  const TOTAL_SLIDES = 6;
   const dateStr = format(new Date(), 'MMMM yyyy');
 
   const handleFullscreen = () => {
@@ -265,7 +266,8 @@ function renderSlide(
       return <TopDealsSlide slideNumber={4} totalSlides={total} deals={deals} commentary={commentary[3] ?? ''} onCommentaryChange={updateCommentary(3)} />;
     case 4:
       return <WinLossSlide slideNumber={5} totalSlides={total} wonDeals={wonDeals} lostDeals={lostDeals} commentary={commentary[4] ?? ''} onCommentaryChange={updateCommentary(4)} />;
-    default:
+    case 5:
+      return <MDFSlide slideNumber={6} totalSlides={total} deals={deals} commentary={commentary[5] ?? ''} onCommentaryChange={updateCommentary(5)} />;
       return null;
   }
 }
