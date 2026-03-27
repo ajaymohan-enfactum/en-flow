@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAccount, useUpdateAccount } from '@/hooks/useAccounts';
 import { useDeals } from '@/hooks/useDeals';
+import { useEmployee } from '@/contexts/EmployeeContext';
+import { logEvent } from '@/lib/events';
 import { formatSGD } from '@/lib/format';
 import { StageBadge } from '@/components/StatusBadges';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +17,7 @@ export default function AccountDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: acc, isLoading } = useAccount(id);
   const { data: allDeals = [] } = useDeals();
+  const { employee } = useEmployee();
   const updateAccount = useUpdateAccount();
 
   const [editingVendors, setEditingVendors] = useState(false);
@@ -39,10 +42,22 @@ export default function AccountDetail() {
   };
 
   const handleSaveVendors = () => {
+    const oldFlags = currentVendorFlags;
     updateAccount.mutate(
       { id: acc.id, updates: { vendor_flags: vendorFlags } },
       {
         onSuccess: () => {
+          logEvent({
+            entity_type: 'account',
+            entity_id: acc.id,
+            event_type: 'account.updated',
+            payload: {
+              changed_fields: {
+                vendor_flags: { from: oldFlags, to: vendorFlags },
+              },
+            },
+            actor_id: employee?.id,
+          });
           toast.success('Vendor partnerships updated');
           setEditingVendors(false);
         },

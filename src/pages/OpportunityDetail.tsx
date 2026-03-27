@@ -5,8 +5,10 @@ import { useAccount } from '@/hooks/useAccounts';
 import { useEmployee } from '@/contexts/EmployeeContext';
 import { db } from '@/integrations/supabase/db';
 import { formatSGD } from '@/lib/format';
+import { logEvent } from '@/lib/events';
 import { detectMdfEligibility, PRODUCT_LINE_OPTIONS } from '@/lib/mdf';
 import { StageBadge } from '@/components/StatusBadges';
+import ActivityTimeline from '@/components/ActivityTimeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, DollarSign, TrendingUp, Save, Tag, ChevronDown, X } from 'lucide-react';
+import { ArrowLeft, DollarSign, TrendingUp, Save, Tag, ChevronDown, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -117,7 +119,7 @@ export default function OpportunityDetail() {
 
       // Log MDF flagged event if eligible
       if (mdfForm.mdf_eligible) {
-        await db.from('events').insert({
+        logEvent({
           module: 'enalloy',
           entity_type: 'deal',
           entity_id: deal.id,
@@ -128,13 +130,28 @@ export default function OpportunityDetail() {
             account_vendor_flags: account?.vendor_flags ?? null,
           },
           actor_id: employee?.id,
-          occurred_at: new Date().toISOString(),
         });
       }
+
+      // Log deal.updated event for MDF field changes
+      logEvent({
+        entity_type: 'deal',
+        entity_id: deal.id,
+        event_type: 'deal.updated',
+        payload: {
+          changed_fields: {
+            product_lines: { from: productLines, to: mdfForm.product_lines },
+            mdf_eligible: { from: deal.mdf_eligible, to: mdfForm.mdf_eligible },
+            mdf_amount: { from: deal.mdf_amount, to: parseFloat(mdfForm.mdf_amount) || null },
+          },
+        },
+        actor_id: employee?.id,
+      });
 
       toast.success('MDF details updated');
       setEditingMdf(false);
       queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
     } catch (err: any) {
       toast.error('Failed to update MDF: ' + err.message);
     } finally {
@@ -169,14 +186,22 @@ export default function OpportunityDetail() {
 
       if (marginError) throw marginError;
 
-      await db.from('events').insert({
+      logEvent({
         module: 'enedge',
         entity_type: 'margin',
         entity_id: (marginData as any)?.id,
         event_type: 'margin.created',
         payload: { deal_id: deal.id, revenue, gp_percent: gpPct },
         actor_id: employee?.id,
-        occurred_at: new Date().toISOString(),
+      });
+
+      // Also log as deal timeline event
+      logEvent({
+        entity_type: 'deal',
+        entity_id: deal.id,
+        event_type: 'margin.created',
+        payload: { revenue, gp_percent: gpPct },
+        actor_id: employee?.id,
       });
 
       if (gpPct < 15) {
@@ -187,6 +212,7 @@ export default function OpportunityDetail() {
 
       setShowMarginForm(false);
       queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
     } catch (err: any) {
       toast.error('Failed to create margin: ' + err.message);
     } finally {
@@ -255,12 +281,13 @@ export default function OpportunityDetail() {
         <TabsList className="bg-card border">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="margin" className="flex items-center gap-1">
-            <DollarSign className="h-3 w-3" />
-            Margin & Profitability
+            <DollarSign className="h-3 w-3" />Margin
           </TabsTrigger>
           <TabsTrigger value="mdf" className="flex items-center gap-1">
-            <Tag className="h-3 w-3" />
-            MDF Opportunity
+            <Tag className="h-3 w-3" />MDF
+          </TabsTrigger>
+          <TabsTrigger value="timeline" className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />Timeline
           </TabsTrigger>
         </TabsList>
 
@@ -300,8 +327,7 @@ export default function OpportunityDetail() {
             <div className="data-panel">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="consulting-headline flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Margin & Profitability
+                  <TrendingUp className="h-4 w-4" />Margin & Profitability
                 </h3>
                 <div className="flex items-center gap-2">
                   {deal.margin_approved === true && <Badge variant="success" className="text-[10px]">✓ Approved</Badge>}
@@ -325,9 +351,7 @@ export default function OpportunityDetail() {
                   <p className="section-label">GP %</p>
                   <div className="mt-0.5">
                     {gpPercent != null ? (
-                      <Badge variant={gpVariant as any} className="text-xs font-mono px-2 py-0.5">
-                        {gpPercent.toFixed(1)}%
-                      </Badge>
+                      <Badge variant={gpVariant as any} className="text-xs font-mono px-2 py-0.5">{gpPercent.toFixed(1)}%</Badge>
                     ) : <span className="text-sm text-muted-foreground">—</span>}
                   </div>
                 </div>
@@ -343,7 +367,7 @@ export default function OpportunityDetail() {
               <h3 className="consulting-headline flex items-center gap-2 mb-4">
                 <DollarSign className="h-4 w-4" />Add Margin Data
               </h3>
-              <p className="text-xs text-muted-foreground mb-4">No margin record exists for this deal. Create one to track profitability.</p>
+              <p className="text-xs text-muted-foreground mb-4">No margin record exists for this deal.</p>
               {!showMarginForm ? (
                 <Button onClick={() => { setMarginForm(f => ({ ...f, revenue: String(deal.value ?? '') })); setShowMarginForm(true); }} className="text-xs h-8">
                   <DollarSign className="h-3 w-3 mr-1" />Add Margin Record
@@ -369,7 +393,6 @@ export default function OpportunityDetail() {
                       </div>
                     ))}
                   </div>
-                  {/* Live GP preview */}
                   {(() => {
                     const rev = parseFloat(marginForm.revenue) || 0;
                     const cogs = parseFloat(marginForm.cost_of_goods) || 0;
@@ -380,7 +403,7 @@ export default function OpportunityDetail() {
                     const previewVariant = gpPct >= 20 ? 'success' : gpPct >= 12 ? 'warning' : 'destructive';
                     return rev > 0 ? (
                       <div className="p-3 rounded bg-muted/50 border border-border/40 flex items-center gap-4 text-sm">
-                        <div><span className="text-muted-foreground">Gross Profit: </span><span className="sgd-value font-semibold">{formatSGD(gp)}</span></div>
+                        <div><span className="text-muted-foreground">GP: </span><span className="sgd-value font-semibold">{formatSGD(gp)}</span></div>
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">GP%: </span>
                           <Badge variant={previewVariant as any} className="text-xs font-mono px-2 py-0.5">{gpPct.toFixed(1)}%</Badge>
@@ -408,18 +431,14 @@ export default function OpportunityDetail() {
           {!editingMdf ? (
             <div className="data-panel">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="consulting-headline flex items-center gap-2">
-                  <Tag className="h-4 w-4" />MDF Opportunity
-                </h3>
+                <h3 className="consulting-headline flex items-center gap-2"><Tag className="h-4 w-4" />MDF Opportunity</h3>
                 <Button size="sm" variant="outline" onClick={handleStartMdfEdit} className="text-xs h-7">Edit MDF</Button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className="section-label">MDF Eligible</p>
                   <p className="text-sm font-semibold mt-0.5">
-                    {deal.mdf_eligible ? (
-                      <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10">Yes</Badge>
-                    ) : 'No'}
+                    {deal.mdf_eligible ? <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10">Yes</Badge> : 'No'}
                   </p>
                 </div>
                 <div>
@@ -448,11 +467,7 @@ export default function OpportunityDetail() {
             </div>
           ) : (
             <div className="data-panel">
-              <h3 className="consulting-headline flex items-center gap-2 mb-4">
-                <Tag className="h-4 w-4" />Edit MDF Details
-              </h3>
-
-              {/* Product Lines multi-select */}
+              <h3 className="consulting-headline flex items-center gap-2 mb-4"><Tag className="h-4 w-4" />Edit MDF Details</h3>
               <div className="space-y-2 mb-4">
                 <label className="section-label">Product Lines</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -476,22 +491,14 @@ export default function OpportunityDetail() {
                   })}
                 </div>
               </div>
-
-              {/* MDF Eligible toggle */}
               <div className="flex items-center gap-3 mb-4">
                 <label className="section-label">MDF Eligible</label>
-                <Switch
-                  checked={mdfForm.mdf_eligible}
-                  onCheckedChange={v => setMdfForm(f => ({ ...f, mdf_eligible: v }))}
-                />
+                <Switch checked={mdfForm.mdf_eligible} onCheckedChange={v => setMdfForm(f => ({ ...f, mdf_eligible: v }))} />
                 <span className="text-xs text-muted-foreground">
                   {detectMdfEligibility(account?.vendor_flags, mdfForm.product_lines)
-                    ? '(Auto-detected from product lines/vendor flags)'
-                    : '(Manual override)'}
+                    ? '(Auto-detected)' : '(Manual override)'}
                 </span>
               </div>
-
-              {/* MDF Amount (collapsible when eligible) */}
               {mdfForm.mdf_eligible && (
                 <Collapsible defaultOpen>
                   <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-foreground/80 mb-2">
@@ -500,13 +507,7 @@ export default function OpportunityDetail() {
                   <CollapsibleContent className="space-y-3 pl-4 border-l-2 border-amber-500/30">
                     <div className="space-y-1 max-w-xs">
                       <label className="section-label">Estimated MDF Amount (SGD)</label>
-                      <Input
-                        type="number"
-                        value={mdfForm.mdf_amount}
-                        onChange={e => setMdfForm(f => ({ ...f, mdf_amount: e.target.value }))}
-                        placeholder="0"
-                        className="h-8 text-sm bg-muted"
-                      />
+                      <Input type="number" value={mdfForm.mdf_amount} onChange={e => setMdfForm(f => ({ ...f, mdf_amount: e.target.value }))} placeholder="0" className="h-8 text-sm bg-muted" />
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-relaxed max-w-md">
                       This deal may qualify for vendor MDF funding. The MDF-adjusted margin will be calculated in the profitability section.
@@ -514,15 +515,17 @@ export default function OpportunityDetail() {
                   </CollapsibleContent>
                 </Collapsible>
               )}
-
               <div className="flex gap-2 mt-4">
-                <Button onClick={handleSaveMdf} disabled={savingMdf} className="text-xs h-8">
-                  <Save className="h-3 w-3 mr-1" />{savingMdf ? 'Saving...' : 'Save MDF'}
-                </Button>
+                <Button onClick={handleSaveMdf} disabled={savingMdf} className="text-xs h-8"><Save className="h-3 w-3 mr-1" />{savingMdf ? 'Saving...' : 'Save MDF'}</Button>
                 <Button variant="ghost" onClick={() => setEditingMdf(false)} className="text-xs h-8">Cancel</Button>
               </div>
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Timeline Tab ── */}
+        <TabsContent value="timeline" className="mt-3">
+          <ActivityTimeline entityType="deal" entityId={deal.id} />
         </TabsContent>
       </Tabs>
     </div>

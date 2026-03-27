@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FollowupBadge, ConfidenceBadge, StageBadge, StuckBadge } from '@/components/StatusBadges';
 import { formatSGD, formatPercent } from '@/lib/format';
 import { useDeals, useUpdateDeal } from '@/hooks/useDeals';
+import { useEmployee } from '@/contexts/EmployeeContext';
+import { logEvent } from '@/lib/events';
 import { STAGES_ORDERED, Stage } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +27,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import { toast } from 'sonner';
 import type { DbVDeal } from '@/integrations/supabase/db';
+import { LossReasonDialog } from '@/components/LossReasonDialog';
 
 type ViewMode = 'kanban' | 'table';
 
@@ -34,6 +37,14 @@ export default function Pipeline() {
   const [stageFilter, setStageFilter] = useState<string>('all');
   const { data: deals = [], isLoading } = useDeals();
   const updateDeal = useUpdateDeal();
+  const { employee } = useEmployee();
+  const navigate = useNavigate();
+
+  // Loss reason dialog state
+  const [lossDialog, setLossDialog] = useState<{ open: boolean; dealId: string; dealTitle: string; fromStage: string }>({
+    open: false, dealId: '', dealTitle: '', fromStage: '',
+  });
+  const [lossLoading, setLossLoading] = useState(false);
 
   const filtered = useMemo(() => {
     let result = deals;
@@ -52,19 +63,95 @@ export default function Pipeline() {
   }, [deals, search, stageFilter]);
 
   const handleStageChange = useCallback((dealId: string, newStage: Stage) => {
+    const deal = deals.find(d => d.id === dealId);
+    if (!deal) return;
+    const oldStage = deal.stage || 'Unknown';
+
+    // If changing to Lost, show loss reason dialog
+    if (newStage === 'Lost') {
+      setLossDialog({ open: true, dealId, dealTitle: deal.title, fromStage: oldStage });
+      return;
+    }
+
     updateDeal.mutate(
       { id: dealId, updates: { stage: newStage } },
       {
         onSuccess: () => {
-          const deal = deals.find(d => d.id === dealId);
-          toast.success(`Moved "${deal?.title}" to ${newStage}`);
+          // Log stage change event
+          logEvent({
+            entity_type: 'deal',
+            entity_id: dealId,
+            event_type: newStage === 'Closed' ? 'deal.won' : 'deal.stage_changed',
+            payload: newStage === 'Closed'
+              ? { value: deal.value, account_name: deal.account_name, margin_gp_percent: deal.margin_gp_percent ?? deal.gp_percent }
+              : { from: oldStage, to: newStage, value: deal.value },
+            actor_id: employee?.id,
+          });
+
+          if (newStage === 'Closed') {
+            toast.success(
+              <div className="space-y-1">
+                <p className="font-medium">🎉 Deal won! "{deal.title}"</p>
+                <p className="text-xs text-muted-foreground">Would you like to create a contract in en·Forge?</p>
+                <Button
+                  size="sm"
+                  className="text-xs h-7 mt-1"
+                  onClick={() => navigate(`/contracts/new?deal_id=${dealId}`)}
+                >
+                  Create Contract →
+                </Button>
+              </div>,
+              { duration: 8000 }
+            );
+          } else {
+            toast.success(`Moved "${deal.title}" to ${newStage}`);
+          }
         },
         onError: (err) => {
           toast.error('Failed to update stage: ' + (err as Error).message);
         },
       }
     );
-  }, [deals, updateDeal]);
+  }, [deals, updateDeal, employee, navigate]);
+
+  const handleLossConfirm = useCallback(async (reason: string) => {
+    const { dealId, fromStage } = lossDialog;
+    const deal = deals.find(d => d.id === dealId);
+    setLossLoading(true);
+
+    updateDeal.mutate(
+      { id: dealId, updates: { stage: 'Lost' } },
+      {
+        onSuccess: () => {
+          const createdAt = deal?.deal_created_at ? new Date(deal.deal_created_at) : null;
+          const daysInPipeline = createdAt
+            ? Math.round((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+            : null;
+
+          logEvent({
+            entity_type: 'deal',
+            entity_id: dealId,
+            event_type: 'deal.lost',
+            payload: {
+              value: deal?.value,
+              loss_reason: reason,
+              days_in_pipeline: daysInPipeline,
+              from_stage: fromStage,
+            },
+            actor_id: employee?.id,
+          });
+
+          toast.error(`Deal "${deal?.title}" marked as Lost — ${reason}`);
+          setLossDialog({ open: false, dealId: '', dealTitle: '', fromStage: '' });
+          setLossLoading(false);
+        },
+        onError: (err) => {
+          toast.error('Failed to update: ' + (err as Error).message);
+          setLossLoading(false);
+        },
+      }
+    );
+  }, [lossDialog, deals, updateDeal, employee]);
 
   if (isLoading) {
     return (
@@ -116,6 +203,15 @@ export default function Pipeline() {
       </div>
 
       {viewMode === 'kanban' ? <KanbanView deals={filtered} onStageChange={handleStageChange} /> : <PipelineTable deals={filtered} />}
+
+      {/* Loss Reason Dialog */}
+      <LossReasonDialog
+        open={lossDialog.open}
+        onClose={() => setLossDialog(d => ({ ...d, open: false }))}
+        onConfirm={handleLossConfirm}
+        dealTitle={lossDialog.dealTitle}
+        saving={lossLoading}
+      />
     </div>
   );
 }
