@@ -35,10 +35,10 @@ const DROPDOWN_CATEGORIES = [
 ];
 
 export default function AdminSettings() {
-  const { currentUser } = useAuth();
+  const { appRole } = useEmployee();
   const [activeTab, setActiveTab] = useState<Tab>('users');
 
-  if (currentUser.role !== 'admin') {
+  if (appRole !== 'admin') {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-2">
