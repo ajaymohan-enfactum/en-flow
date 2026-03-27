@@ -171,10 +171,23 @@ export default function Dashboard() {
   // ─── MDF Tracker ───
   const mdfStats = useMemo(() => {
     const mdfDeals = deals.filter(d => d.mdf_eligible && d.stage && !['Lost'].includes(d.stage));
+    const estimatedMdf = mdfDeals.reduce((s, d) => s + (d.mdf_amount ?? 0), 0);
+    // Avg MDF-adjusted GP%: (gross_profit + mdf_amount) / revenue * 100
+    const dealsWithRevenue = mdfDeals.filter(d => (d.margin_revenue ?? 0) > 0);
+    const avgMdfAdjustedGp = dealsWithRevenue.length > 0
+      ? dealsWithRevenue.reduce((s, d) => {
+          const gp = d.gross_profit ?? d.margin_gp ?? 0;
+          const mdf = d.mdf_amount ?? 0;
+          const rev = d.margin_revenue ?? 1;
+          return s + ((gp + mdf) / rev) * 100;
+        }, 0) / dealsWithRevenue.length
+      : null;
     return {
       count: mdfDeals.length,
       pipelineValue: mdfDeals.reduce((s, d) => s + (d.value ?? 0), 0),
-      estimatedMdf: mdfDeals.reduce((s, d) => s + (d.mdf_amount ?? 0), 0),
+      estimatedMdf,
+      avgMdfAdjustedGp,
+      dealsWithRevenue: dealsWithRevenue.length,
     };
   }, [deals]);
 
