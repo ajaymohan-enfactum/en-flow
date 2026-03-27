@@ -7,6 +7,7 @@ import { STAGES_ORDERED, Stage } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LayoutGrid, Table as TableIcon, Search, Plus, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -261,6 +262,25 @@ function MarginIndicator({ deal }: { deal: DbVDeal }) {
   );
 }
 
+function MdfBadge({ deal }: { deal: DbVDeal }) {
+  if (!deal.mdf_eligible) return null;
+  const estAmount = deal.mdf_amount ? formatSGD(deal.mdf_amount) : 'TBD';
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400 bg-amber-500/10">
+            🏷️ MDF
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          HP/Lenovo MDF eligible — est. {estAmount}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function KanbanCardContent({ deal, isDragging, dragListeners }: { deal: DbVDeal; isDragging?: boolean; dragListeners?: any }) {
   return (
     <div className={cn('kanban-card group', isDragging && 'ring-2 ring-primary shadow-lg shadow-primary/20 rotate-1')}>
@@ -272,9 +292,12 @@ function KanbanCardContent({ deal, isDragging, dragListeners }: { deal: DbVDeal;
           <GripVertical className="h-3.5 w-3.5" />
         </button>
         <div className="flex-1 min-w-0">
-          <Link to={`/opportunity/${deal.id}`} className="text-sm font-medium leading-tight hover:text-primary transition-colors block" onClick={e => isDragging && e.preventDefault()}>
-            {deal.title}
-          </Link>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Link to={`/opportunity/${deal.id}`} className="text-sm font-medium leading-tight hover:text-primary transition-colors" onClick={e => isDragging && e.preventDefault()}>
+              {deal.title}
+            </Link>
+            <MdfBadge deal={deal} />
+          </div>
           <p className="text-[11px] text-muted-foreground mb-2">{deal.account_name}</p>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-semibold sgd-value">{formatSGD(deal.value ?? 0)}</span>
@@ -304,6 +327,7 @@ function PipelineTable({ deals }: { deals: DbVDeal[] }) {
             <th className="text-right">Win Prob</th>
             <th className="text-right">Weighted</th>
             <th className="text-right">GP%</th>
+            <th className="text-center">MDF</th>
             <th className="text-left">Expected Close</th>
           </tr>
         </thead>
@@ -320,6 +344,7 @@ function PipelineTable({ deals }: { deals: DbVDeal[] }) {
               <td className="text-right font-mono text-muted-foreground">{Math.round((d.win_probability ?? 0) * 100)}%</td>
               <td className="text-right sgd-value">{formatSGD((d.value ?? 0) * (d.win_probability ?? 0))}</td>
               <td className="text-right font-mono text-muted-foreground">{d.gp_percent != null ? `${d.gp_percent.toFixed(1)}%` : '—'}</td>
+              <td className="text-center">{d.mdf_eligible ? <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400 bg-amber-500/10">🏷️ MDF</Badge> : '—'}</td>
               <td className="text-muted-foreground text-xs">{d.expected_close_date || '—'}</td>
             </tr>
           ))}
