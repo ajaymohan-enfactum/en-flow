@@ -77,6 +77,7 @@ export interface DbVDeal {
   mdf_subsidy: number | null;
   gross_profit: number | null;
   gp_percent: number | null;
+  actual_close_date: string | null;
   deal_created_at: string | null;
   deal_updated_at: string | null;
 }

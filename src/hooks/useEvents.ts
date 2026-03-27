@@ -31,3 +31,36 @@ export function useEntityEvents(entityType: string, entityId: string | undefined
     enabled: !!entityId,
   });
 }
+
+export function useRecentEvents(module: string, limit = 15) {
+  return useQuery({
+    queryKey: ['events', 'recent', module, limit],
+    queryFn: async () => {
+      const { data, error } = await db
+        .from('events')
+        .select('*')
+        .eq('module', module)
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return (data ?? []) as DbEvent[];
+    },
+  });
+}
+
+export function useAllEvents() {
+  return useQuery({
+    queryKey: ['events', 'all'],
+    queryFn: async () => {
+      const { data, error } = await db
+        .from('events')
+        .select('*')
+        .order('occurred_at', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+      return (data ?? []) as DbEvent[];
+    },
+  });
+}
