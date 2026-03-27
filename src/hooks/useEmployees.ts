@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { queryEmployees, type DbEmployee } from '@/integrations/supabase/db';
+import { db, type DbEmployee } from '@/integrations/supabase/db';
 
 export function useEmployees() {
   return useQuery({
     queryKey: ['employees'],
     queryFn: async () => {
-      const { data, error } = await queryEmployees()
+      const { data, error } = await db
+        .from('employees')
         .select('*')
         .order('name');
 

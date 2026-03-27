@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { queryEmployees, type DbEmployee } from '@/integrations/supabase/db';
+import { db, type DbEmployee } from '@/integrations/supabase/db';
 import { useAuth } from './AuthContext';
 
 type AppRole = 'admin' | 'sales_bd' | 'delivery' | 'readonly';
@@ -47,7 +47,8 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     const fetchEmployee = async () => {
       setLoading(true);
       setError(null);
-      const { data, error: err } = await queryEmployees()
+      const { data, error: err } = await db
+        .from('employees')
         .select('*')
         .eq('email', user.email!)
         .maybeSingle();

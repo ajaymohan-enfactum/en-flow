@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { queryAccounts, type DbAccount } from '@/integrations/supabase/db';
+import { db, type DbAccount } from '@/integrations/supabase/db';
 
 export function useAccounts() {
   return useQuery({
     queryKey: ['accounts'],
     queryFn: async () => {
-      const { data, error } = await queryAccounts()
+      const { data, error } = await db
+        .from('accounts')
         .select('*')
         .order('name');
 
@@ -20,7 +21,8 @@ export function useAccount(id: string | undefined) {
     queryKey: ['accounts', id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await queryAccounts()
+      const { data, error } = await db
+        .from('accounts')
         .select('*')
         .eq('id', id)
         .maybeSingle();
@@ -37,7 +39,8 @@ export function useUpdateAccount() {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Record<string, any> }) => {
-      const { data, error } = await queryAccounts()
+      const { data, error } = await db
+        .from('accounts')
         .update(updates)
         .eq('id', id)
         .select()
