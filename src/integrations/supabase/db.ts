@@ -64,13 +64,18 @@ export interface DbVDeal {
   owner_id: string | null;
   owner_name: string | null;
   owner_email: string | null;
+  // Margin fields from v_deals view
+  margin_revenue: number | null;
+  margin_gp: number | null;
+  margin_gp_percent: number | null;
+  margin_approved: boolean | null;
+  // Legacy/additional margin fields that may be in the view
   revenue: number | null;
   cost_of_goods: number | null;
   cost_of_services: number | null;
   mdf_subsidy: number | null;
   gross_profit: number | null;
   gp_percent: number | null;
-  margin_approved: boolean | null;
   deal_created_at: string | null;
   deal_updated_at: string | null;
 }

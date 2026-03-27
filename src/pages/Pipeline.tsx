@@ -4,6 +4,7 @@ import { FollowupBadge, ConfidenceBadge, StageBadge, StuckBadge } from '@/compon
 import { formatSGD, formatPercent } from '@/lib/format';
 import { useDeals, useUpdateDeal } from '@/hooks/useDeals';
 import { STAGES_ORDERED, Stage } from '@/types';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LayoutGrid, Table as TableIcon, Search, Plus, GripVertical } from 'lucide-react';
@@ -226,6 +227,40 @@ function SortableKanbanCard({ deal }: { deal: DbVDeal }) {
   );
 }
 
+function MarginIndicator({ deal }: { deal: DbVDeal }) {
+  const gp = deal.margin_gp_percent ?? deal.gp_percent;
+  const hasMargin = gp != null || deal.margin_revenue != null || deal.revenue != null;
+
+  if (!hasMargin) {
+    return (
+      <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/20">
+        <span className="text-[10px] text-muted-foreground">No margin data</span>
+        <Link to={`/opportunity/${deal.id}`} className="text-[10px] text-primary hover:underline" onClick={e => e.stopPropagation()}>
+          Add margin →
+        </Link>
+      </div>
+    );
+  }
+
+  const gpValue = gp ?? 0;
+  const variant = gpValue >= 20 ? 'success' : gpValue >= 12 ? 'warning' : 'destructive';
+  const approved = deal.margin_approved;
+
+  return (
+    <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/20">
+      <Badge variant={variant} className="text-[10px] px-1.5 py-0 font-mono">
+        GP: {gpValue.toFixed(1)}%
+      </Badge>
+      {approved === false && (
+        <span className="text-[10px] text-warning">⏳ Pending</span>
+      )}
+      {approved === true && (
+        <span className="text-[10px] text-success">✓ Approved</span>
+      )}
+    </div>
+  );
+}
+
 function KanbanCardContent({ deal, isDragging, dragListeners }: { deal: DbVDeal; isDragging?: boolean; dragListeners?: any }) {
   return (
     <div className={cn('kanban-card group', isDragging && 'ring-2 ring-primary shadow-lg shadow-primary/20 rotate-1')}>
@@ -246,6 +281,7 @@ function KanbanCardContent({ deal, isDragging, dragListeners }: { deal: DbVDeal;
             <span className="text-[11px] text-muted-foreground font-mono">{Math.round((deal.win_probability ?? 0) * 100)}%</span>
           </div>
           <p className="text-[10px] text-muted-foreground">{deal.owner_name}</p>
+          <MarginIndicator deal={deal} />
         </div>
       </div>
     </div>
