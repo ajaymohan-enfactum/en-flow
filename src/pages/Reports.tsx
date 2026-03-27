@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { KPICard } from '@/components/KPICard';
 import { StageBadge } from '@/components/StatusBadges';
 import { formatSGD } from '@/lib/format';
@@ -20,6 +20,30 @@ export default function Reports() {
   const [narrativeMode, setNarrativeMode] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [commentary, setCommentary] = useState<Record<number, string>>({});
+
+  // Keyboard navigation for narrative mode
+  useEffect(() => {
+    if (!narrativeMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCurrentSlide(c => Math.min(c + 1, TOTAL_SLIDES - 1));
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCurrentSlide(c => Math.max(c - 1, 0));
+      } else if (e.key === 'Escape') {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          setNarrativeMode(false);
+          setCurrentSlide(0);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [narrativeMode]);
 
   const openDeals = useMemo(() => deals.filter(d => d.stage && !['Closed', 'Lost', 'Won'].includes(d.stage)), [deals]);
   const totalPipeline = openDeals.reduce((s, d) => s + (d.value ?? 0), 0);
