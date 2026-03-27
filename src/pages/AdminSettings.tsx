@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEmployee } from '@/contexts/EmployeeContext';
 import { mockUsers, mockStageRules } from '@/data/mockData';
 import { User, UserRole, StageRule, STAGES_ORDERED } from '@/types';
 import { Badge } from '@/components/ui/badge';
