@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { KPICard } from '@/components/KPICard';
 import { StageBadge } from '@/components/StatusBadges';
 import { formatSGD } from '@/lib/format';
