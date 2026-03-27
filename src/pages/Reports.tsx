@@ -114,7 +114,7 @@ export default function Reports() {
               }`}
             >
               <ScaledSlide className="w-full h-full pointer-events-none">
-                {renderSlide(i, TOTAL_SLIDES, dateStr, { totalPipeline, weightedPipeline, openDeals: openDeals.length, wonCount: wonDeals.length, wonValue: wonDeals.reduce((s, d) => s + (d.value ?? 0), 0), lostCount: lostDeals.length, winRate }, pipelineByStage, deals, wonDeals, lostDeals, commentary, () => {})}
+                {renderSlide(i, TOTAL_SLIDES, dateStr, { totalPipeline, weightedPipeline, openDeals: openDeals.length, wonCount: wonDeals.length, wonValue: wonDeals.reduce((s, d) => s + (d.value ?? 0), 0), lostCount: lostDeals.length, winRate }, pipelineByStage, deals, wonDeals, lostDeals, commentary, () => () => {})}
               </ScaledSlide>
             </button>
           ))}
