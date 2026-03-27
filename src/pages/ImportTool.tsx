@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEmployee } from '@/contexts/EmployeeContext';
 import { mockAccounts, mockOpportunities } from '@/data/mockData';
 import { STAGES_ORDERED, Stage } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -56,7 +56,7 @@ interface MappedRow {
 }
 
 export default function ImportTool() {
-  const { currentUser } = useAuth();
+  const { appRole } = useEmployee();
   const [step, setStep] = useState<Step>('upload');
   const [rawData, setRawData] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -66,7 +66,7 @@ export default function ImportTool() {
   const [importedCount, setImportedCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  if (currentUser.role !== 'admin') {
+  if (appRole !== 'admin') {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-2">

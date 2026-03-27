@@ -10,9 +10,10 @@ import {
   ChevronRight,
   User,
   Upload,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockUsers } from '@/data/mockData';
+import { useEmployee } from '@/contexts/EmployeeContext';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
@@ -33,8 +34,12 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { currentUser, setCurrentUser } = useAuth();
+  const { user, signOut } = useAuth();
+  const { employee, appRole } = useEmployee();
   const location = useLocation();
+
+  const displayName = employee?.name || user?.user_metadata?.full_name || user?.email || 'User';
+  const avatarUrl = user?.user_metadata?.avatar_url;
 
   return (
     <aside
@@ -98,7 +103,7 @@ export function AppSidebar() {
           );
         })}
 
-        {currentUser.role === 'admin' && (
+        {appRole === 'admin' && (
           <>
             {!collapsed && (
               <div className="pt-4 pb-1 px-1">
@@ -125,46 +130,45 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* User switcher (demo) */}
+      {/* User info */}
       <div className="px-2 py-3 border-t" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
         {!collapsed ? (
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 px-2">
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                <User className="h-3 w-3 text-brand-blue" />
-              </div>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <User className="h-3 w-3 text-brand-blue" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium truncate" style={{ color: 'hsl(var(--sidebar-accent-foreground))' }}>
-                  {currentUser.name}
+                  {displayName}
                 </p>
                 <p className="text-[10px]" style={{ color: 'hsl(var(--sidebar-foreground))' }}>
-                  {ROLE_LABELS[currentUser.role]}
+                  {ROLE_LABELS[appRole] || appRole}
                 </p>
               </div>
             </div>
-            <select
-              value={currentUser.id}
-              onChange={(e) => {
-                const u = mockUsers.find(u => u.id === e.target.value);
-                if (u) setCurrentUser(u);
-              }}
-              className="w-full text-[11px] rounded border px-2 py-1"
-              style={{
-                background: 'hsl(var(--sidebar-accent))',
-                color: 'hsl(var(--sidebar-accent-foreground))',
-                borderColor: 'hsl(var(--sidebar-border))',
-              }}
+            <button
+              onClick={signOut}
+              className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] rounded transition-colors hover:bg-sidebar-accent"
+              style={{ color: 'hsl(var(--sidebar-foreground))' }}
             >
-              {mockUsers.map(u => (
-                <option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]})</option>
-              ))}
-            </select>
+              <LogOut className="h-3 w-3" />
+              Sign out
+            </button>
           </div>
         ) : (
-          <div className="flex justify-center" title={`${currentUser.name} (${ROLE_LABELS[currentUser.role]})`}>
-            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
-              <User className="h-3.5 w-3.5 text-brand-blue" />
-            </div>
+          <div className="flex justify-center" title={`${displayName} (${ROLE_LABELS[appRole] || appRole})`}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="w-7 h-7 rounded-full" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
+                <User className="h-3.5 w-3.5 text-brand-blue" />
+              </div>
+            )}
           </div>
         )}
       </div>

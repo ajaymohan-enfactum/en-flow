@@ -1,17 +1,20 @@
 import { useMemo, useState } from 'react';
-import { mockArtifacts, mockOpportunities, getAccountById, getUserById } from '@/data/mockData';
+import { useDeals } from '@/hooks/useDeals';
 import { formatDate } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Search, FileText, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StageBadge } from '@/components/StatusBadges';
-import { Search, FileText, Copy } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { mockArtifacts, getAccountById, getUserById } from '@/data/mockData';
+import { mockOpportunities } from '@/data/mockData';
 
 export default function PitchLibrary() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
+  // Still using mock artifacts as they don't have a DB table yet
   const enriched = useMemo(() => {
     return mockArtifacts.map(a => {
       const opp = mockOpportunities.find(o => o.id === a.opportunity_id);
