@@ -46,6 +46,8 @@ export function useRecentEvents(module: string, limit = 15) {
       if (error) throw error;
       return (data ?? []) as DbEvent[];
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -62,5 +64,7 @@ export function useAllEvents() {
       if (error) throw error;
       return (data ?? []) as DbEvent[];
     },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 }

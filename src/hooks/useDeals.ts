@@ -13,6 +13,8 @@ export function useDeals() {
       if (error) throw error;
       return (data ?? []) as DbVDeal[];
     },
+    refetchInterval: 15_000, // Auto-refresh every 15s
+    refetchIntervalInBackground: false,
   });
 }
 
