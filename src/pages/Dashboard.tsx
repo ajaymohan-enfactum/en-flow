@@ -391,7 +391,7 @@ export default function Dashboard() {
               <p className="section-label">MDF-Eligible Pipeline</p>
               <p className="text-lg font-bold sgd-value mt-0.5">{formatSGD(mdfStats.pipelineValue)}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="section-label">MDF Deals</p>
                 <p className="text-sm font-semibold mt-0.5">{mdfStats.count}</p>
@@ -399,6 +399,15 @@ export default function Dashboard() {
               <div>
                 <p className="section-label">Estimated MDF</p>
                 <p className="sgd-value font-semibold mt-0.5 text-sm">{formatSGD(mdfStats.estimatedMdf)}</p>
+              </div>
+              <div>
+                <p className="section-label">Avg MDF-Adj GP%</p>
+                <p className={`text-sm font-semibold mt-0.5 ${mdfStats.avgMdfAdjustedGp != null && mdfStats.avgMdfAdjustedGp >= 20 ? 'text-emerald-400' : mdfStats.avgMdfAdjustedGp != null && mdfStats.avgMdfAdjustedGp >= 12 ? 'text-amber-400' : 'text-destructive'}`}>
+                  {mdfStats.avgMdfAdjustedGp != null ? `${mdfStats.avgMdfAdjustedGp.toFixed(1)}%` : '—'}
+                </p>
+                {mdfStats.dealsWithRevenue > 0 && (
+                  <p className="text-[10px] text-muted-foreground">{mdfStats.dealsWithRevenue} deals</p>
+                )}
               </div>
             </div>
           </div>
