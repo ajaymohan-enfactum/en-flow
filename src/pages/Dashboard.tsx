@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { KPICard } from '@/components/KPICard';
 import { StageBadge } from '@/components/StatusBadges';
@@ -11,6 +11,7 @@ import { STAGES_ORDERED } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow, parseISO, subMonths, startOfMonth, endOfMonth, subDays, isWithinInterval } from 'date-fns';
+import { DashboardDateFilter, getDefaultDateRange, type DateRange } from '@/components/DashboardDateFilter';
 import {
   DollarSign, TrendingUp, Trophy, XCircle, BarChart3, Tag,
   Plus, Activity, AlertTriangle, Clock,
@@ -42,12 +43,26 @@ const FUNNEL_COLORS = ['hsl(210, 100%, 56%)', 'hsl(200, 80%, 50%)', 'hsl(170, 70
 
 export default function Dashboard() {
   const { employee } = useEmployee();
-  const { data: deals = [], isLoading: dealsLoading } = useDeals();
+  const { data: allDeals = [], isLoading: dealsLoading } = useDeals();
   const { data: recentEvents = [] } = useRecentEvents('enflow', 15);
   const { data: allEvents = [] } = useAllEvents();
   const { data: employees = [] } = useEmployees();
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
 
   const employeeMap = useMemo(() => new Map(employees.map(e => [e.id, e.name])), [employees]);
+
+  // Filter deals by date range (using deal created or updated date)
+  const deals = useMemo(() => {
+    return allDeals.filter(d => {
+      const dateStr = d.actual_close_date ?? d.deal_updated_at ?? d.deal_created_at;
+      if (!dateStr) return true; // include deals without dates
+      try {
+        return isWithinInterval(parseISO(dateStr), { start: dateRange.from, end: dateRange.to });
+      } catch {
+        return true;
+      }
+    });
+  }, [allDeals, dateRange]);
 
   // ─── KPI Calculations ───
   const kpis = useMemo(() => {
@@ -238,7 +253,8 @@ export default function Dashboard() {
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">Welcome back, {employee?.name || 'User'}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <DashboardDateFilter value={dateRange} onChange={setDateRange} />
           <Button size="sm" className="h-8 text-xs"><Plus className="h-3 w-3 mr-1" />Opportunity</Button>
         </div>
       </div>
