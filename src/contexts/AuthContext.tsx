@@ -1,31 +1,62 @@
-import React, { createContext, useContext, useState } from 'react';
-import { User, UserRole } from '@/types';
-import { mockUsers } from '@/data/mockData';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
-  currentUser: User;
-  setCurrentUser: (user: User) => void;
-  hasPermission: (action: 'create' | 'edit' | 'delete' | 'view' | 'add_notes') => boolean;
+  session: Session | null;
+  user: SupabaseUser | null;
+  loading: boolean;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const ROLE_PERMISSIONS: Record<UserRole, Set<string>> = {
-  admin: new Set(['create', 'edit', 'delete', 'view', 'add_notes']),
-  sales_bd: new Set(['create', 'edit', 'view', 'add_notes']),
-  delivery: new Set(['view', 'add_notes']),
-  readonly: new Set(['view']),
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(mockUsers[0]); // default admin
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const hasPermission = (action: string) => {
-    return ROLE_PERMISSIONS[currentUser.role]?.has(action) ?? false;
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setLoading(false);
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) throw error;
+  };
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, setCurrentUser, hasPermission }}>
+    <AuthContext.Provider value={{
+      session,
+      user: session?.user ?? null,
+      loading,
+      signInWithGoogle,
+      signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );
