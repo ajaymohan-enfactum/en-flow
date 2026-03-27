@@ -12,9 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow, parseISO, subMonths, startOfMonth, endOfMonth, subDays, isWithinInterval } from 'date-fns';
 import { DashboardDateFilter, getDefaultDateRange, type DateRange } from '@/components/DashboardDateFilter';
+import { generateBoardPackPdf } from '@/lib/boardPackPdf';
 import {
   DollarSign, TrendingUp, Trophy, XCircle, BarChart3, Tag,
-  Plus, Activity, AlertTriangle, Clock,
+  Plus, Activity, AlertTriangle, Clock, FileDown,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer,
