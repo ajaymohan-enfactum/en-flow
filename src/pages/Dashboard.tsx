@@ -256,6 +256,47 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <DashboardDateFilter value={dateRange} onChange={setDateRange} />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => {
+              const topDeals = [...deals]
+                .filter(d => d.stage && !['Lost'].includes(d.stage))
+                .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+                .slice(0, 15)
+                .map(d => ({
+                  title: d.title || 'Untitled',
+                  account_name: d.account_name || '—',
+                  stage: d.stage || '—',
+                  value: d.value ?? 0,
+                  owner_name: d.owner_name || '—',
+                  win_probability: d.win_probability ?? 0,
+                }));
+
+              generateBoardPackPdf({
+                kpis: {
+                  pipelineValue: kpis.pipelineValue,
+                  weightedPipeline: kpis.weightedPipeline,
+                  wonThisMonthCount: kpis.wonThisMonth.length,
+                  wonThisMonthValue: kpis.wonThisMonthValue,
+                  lostThisMonthCount: kpis.lostThisMonth.length,
+                  lostThisMonthValue: kpis.lostThisMonthValue,
+                  avgDealSize: kpis.avgDealSize,
+                  avgMargin: kpis.avgMargin,
+                },
+                funnel: funnelWithConversion,
+                topDeals,
+                mdfStats: { count: mdfStats.count, pipelineValue: mdfStats.pipelineValue, estimatedMdf: mdfStats.estimatedMdf },
+                winRateByMonth,
+                lossReasons,
+                dateRangeLabel: dateRange.label,
+                generatedBy: employee?.name || 'Unknown',
+              });
+            }}
+          >
+            <FileDown className="h-3 w-3 mr-1" />Board Pack
+          </Button>
           <Button size="sm" className="h-8 text-xs"><Plus className="h-3 w-3 mr-1" />Opportunity</Button>
         </div>
       </div>
