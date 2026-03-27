@@ -1,16 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { queryEmployees, type DbEmployee } from '@/integrations/supabase/db';
 import { useAuth } from './AuthContext';
-import type { Tables } from '@/integrations/supabase/types';
 
-export type Employee = Tables<'employees'>;
-
-// Map DB roles to app permission roles
 type AppRole = 'admin' | 'sales_bd' | 'delivery' | 'readonly';
 
 const ROLE_MAP: Record<string, AppRole> = {
   admin: 'admin',
-  'sales_bd': 'sales_bd',
+  sales_bd: 'sales_bd',
   sales: 'sales_bd',
   bd: 'sales_bd',
   delivery: 'delivery',
@@ -26,7 +22,7 @@ const ROLE_PERMISSIONS: Record<AppRole, Set<string>> = {
 };
 
 interface EmployeeContextType {
-  employee: Employee | null;
+  employee: DbEmployee | null;
   loading: boolean;
   error: string | null;
   appRole: AppRole;
@@ -37,7 +33,7 @@ const EmployeeContext = createContext<EmployeeContextType | null>(null);
 
 export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [employee, setEmployee] = useState<DbEmployee | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,8 +47,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     const fetchEmployee = async () => {
       setLoading(true);
       setError(null);
-      const { data, error: err } = await supabase
-        .from('employees')
+      const { data, error: err } = await queryEmployees()
         .select('*')
         .eq('email', user.email!)
         .maybeSingle();
@@ -61,7 +56,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
         console.error('Failed to fetch employee:', err);
         setError('Could not find your employee record.');
       }
-      setEmployee(data);
+      setEmployee(data as DbEmployee | null);
       setLoading(false);
     };
 

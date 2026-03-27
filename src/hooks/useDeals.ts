@@ -1,49 +1,43 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { queryVDeals, queryDeals, type DbVDeal } from '@/integrations/supabase/db';
 
-// Fetch all deals from v_deals view
 export function useDeals() {
   return useQuery({
     queryKey: ['deals'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('v_deals')
+      const { data, error } = await queryVDeals()
         .select('*')
         .order('deal_updated_at', { ascending: false });
 
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as DbVDeal[];
     },
   });
 }
 
-// Fetch a single deal by ID
 export function useDeal(id: string | undefined) {
   return useQuery({
     queryKey: ['deals', id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await supabase
-        .from('v_deals')
+      const { data, error } = await queryVDeals()
         .select('*')
         .eq('id', id)
         .maybeSingle();
 
       if (error) throw error;
-      return data;
+      return data as DbVDeal | null;
     },
     enabled: !!id,
   });
 }
 
-// Update a deal (writes to deals table)
 export function useUpdateDeal() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Record<string, any> }) => {
-      const { data, error } = await supabase
-        .from('deals')
+      const { data, error } = await queryDeals()
         .update(updates)
         .eq('id', id)
         .select()
@@ -58,14 +52,12 @@ export function useUpdateDeal() {
   });
 }
 
-// Create a new deal
 export function useCreateDeal() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (deal: Record<string, any>) => {
-      const { data, error } = await supabase
-        .from('deals')
+      const { data, error } = await queryDeals()
         .insert(deal)
         .select()
         .single();
