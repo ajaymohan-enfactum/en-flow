@@ -61,6 +61,7 @@ export interface DbVDeal {
   account_name: string | null;
   industry: string | null;
   tier: string | null;
+  account_vendor_flags: Record<string, boolean> | null;
   owner_id: string | null;
   owner_name: string | null;
   owner_email: string | null;
