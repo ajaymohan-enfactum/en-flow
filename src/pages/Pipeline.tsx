@@ -1,33 +1,16 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { FollowupBadge, ConfidenceBadge, StageBadge, StuckBadge } from '@/components/StatusBadges';
-import { formatSGD, formatPercent } from '@/lib/format';
 import { useDeals, useUpdateDeal } from '@/hooks/useDeals';
 import { useEmployee } from '@/contexts/EmployeeContext';
 import { logEvent } from '@/lib/events';
 import { STAGES_ORDERED, Stage } from '@/types';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { LayoutGrid, Table as TableIcon, Search, Plus, GripVertical } from 'lucide-react';
+import { LayoutGrid, Table as TableIcon, Search, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { useDroppable } from '@dnd-kit/core';
 import { toast } from 'sonner';
-import type { DbVDeal } from '@/integrations/supabase/db';
 import { LossReasonDialog } from '@/components/LossReasonDialog';
+import { KanbanView } from '@/components/pipeline/KanbanView';
+import { PipelineTable } from '@/components/pipeline/PipelineTable';
 
 type ViewMode = 'kanban' | 'table';
 
@@ -38,9 +21,7 @@ export default function Pipeline() {
   const { data: deals = [], isLoading } = useDeals();
   const updateDeal = useUpdateDeal();
   const { employee } = useEmployee();
-  const navigate = useNavigate();
 
-  // Loss reason dialog state
   const [lossDialog, setLossDialog] = useState<{ open: boolean; dealId: string; dealTitle: string; fromStage: string }>({
     open: false, dealId: '', dealTitle: '', fromStage: '',
   });
@@ -67,7 +48,6 @@ export default function Pipeline() {
     if (!deal) return;
     const oldStage = deal.stage || 'Unknown';
 
-    // If changing to Lost, show loss reason dialog
     if (newStage === 'Lost') {
       setLossDialog({ open: true, dealId, dealTitle: deal.title, fromStage: oldStage });
       return;
@@ -77,7 +57,6 @@ export default function Pipeline() {
       { id: dealId, updates: { stage: newStage } },
       {
         onSuccess: () => {
-          // Log stage change event
           logEvent({
             entity_type: 'deal',
             entity_id: dealId,
@@ -89,20 +68,7 @@ export default function Pipeline() {
           });
 
           if (newStage === 'Closed') {
-            toast.success(
-              <div className="space-y-1">
-                <p className="font-medium">🎉 Deal won! "{deal.title}"</p>
-                <p className="text-xs text-muted-foreground">Would you like to create a contract in en·Forge?</p>
-                <Button
-                  size="sm"
-                  className="text-xs h-7 mt-1"
-                  onClick={() => navigate(`/contracts/new?deal_id=${dealId}`)}
-                >
-                  Create Contract →
-                </Button>
-              </div>,
-              { duration: 8000 }
-            );
+            toast.success(`🎉 Deal won! "${deal.title}"`);
           } else {
             toast.success(`Moved "${deal.title}" to ${newStage}`);
           }
@@ -112,7 +78,7 @@ export default function Pipeline() {
         },
       }
     );
-  }, [deals, updateDeal, employee, navigate]);
+  }, [deals, updateDeal, employee]);
 
   const handleLossConfirm = useCallback(async (reason: string) => {
     const { dealId, fromStage } = lossDialog;
@@ -168,7 +134,6 @@ export default function Pipeline() {
         <Button size="sm" className="h-8 text-xs"><Plus className="h-3 w-3 mr-1" />Add Opportunity</Button>
       </div>
 
-      {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -204,7 +169,6 @@ export default function Pipeline() {
 
       {viewMode === 'kanban' ? <KanbanView deals={filtered} onStageChange={handleStageChange} /> : <PipelineTable deals={filtered} />}
 
-      {/* Loss Reason Dialog */}
       <LossReasonDialog
         open={lossDialog.open}
         onClose={() => setLossDialog(d => ({ ...d, open: false }))}
@@ -212,240 +176,6 @@ export default function Pipeline() {
         dealTitle={lossDialog.dealTitle}
         saving={lossLoading}
       />
-    </div>
-  );
-}
-
-/* ─── Kanban with Drag & Drop ─── */
-
-function KanbanView({ deals, onStageChange }: { deals: DbVDeal[]; onStageChange: (dealId: string, newStage: Stage) => void }) {
-  const kanbanStages = STAGES_ORDERED.filter(s => !['Closed', 'Lost'].includes(s));
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
-  const activeDeal = activeId ? deals.find(d => d.id === activeId) : null;
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveId(null);
-
-    if (!over) return;
-
-    const dealId = active.id as string;
-    const deal = deals.find(d => d.id === dealId);
-    if (!deal) return;
-
-    let targetStage: Stage | undefined;
-    if (kanbanStages.includes(over.id as Stage)) {
-      targetStage = over.id as Stage;
-    } else {
-      const overDeal = deals.find(d => d.id === over.id);
-      if (overDeal) targetStage = overDeal.stage as Stage;
-    }
-
-    if (targetStage && targetStage !== deal.stage) {
-      onStageChange(dealId, targetStage);
-    }
-  };
-
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="flex gap-3 overflow-x-auto pb-4">
-        {kanbanStages.map(stage => {
-          const stageDeals = deals.filter(d => d.stage === stage);
-          return <KanbanColumn key={stage} stage={stage} deals={stageDeals} />;
-        })}
-      </div>
-      <DragOverlay dropAnimation={{ duration: 200, easing: 'ease' }}>
-        {activeDeal ? <KanbanCardContent deal={activeDeal} isDragging /> : null}
-      </DragOverlay>
-    </DndContext>
-  );
-}
-
-function KanbanColumn({ stage, deals }: { stage: Stage; deals: DbVDeal[] }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage });
-  const totalValue = deals.reduce((s, d) => s + (d.value ?? 0), 0);
-  const dealIds = deals.map(d => d.id);
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'kanban-column transition-all duration-200',
-        isOver && 'ring-2 ring-primary/50 bg-primary/5'
-      )}
-    >
-      <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/30">
-        <div>
-          <StageBadge stage={stage} />
-          <p className="text-[11px] text-muted-foreground mt-1">{deals.length} deals · {formatSGD(totalValue)}</p>
-        </div>
-      </div>
-      <SortableContext items={dealIds} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2 min-h-[60px]">
-          {deals.map(deal => (
-            <SortableKanbanCard key={deal.id} deal={deal} />
-          ))}
-          {deals.length === 0 && (
-            <p className="text-[11px] text-muted-foreground text-center py-8 opacity-50">Drop deals here</p>
-          )}
-        </div>
-      </SortableContext>
-    </div>
-  );
-}
-
-function SortableKanbanCard({ deal }: { deal: DbVDeal }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: deal.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.3 : 1,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <KanbanCardContent deal={deal} dragListeners={listeners} />
-    </div>
-  );
-}
-
-function MarginIndicator({ deal }: { deal: DbVDeal }) {
-  const gp = deal.margin_gp_percent ?? deal.gp_percent;
-  const hasMargin = gp != null || deal.margin_revenue != null || deal.revenue != null;
-
-  if (!hasMargin) {
-    return (
-      <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/20">
-        <span className="text-[10px] text-muted-foreground">No margin data</span>
-        <Link to={`/opportunity/${deal.id}`} className="text-[10px] text-primary hover:underline" onClick={e => e.stopPropagation()}>
-          Add margin →
-        </Link>
-      </div>
-    );
-  }
-
-  const gpValue = gp ?? 0;
-  const variant = gpValue >= 20 ? 'success' : gpValue >= 12 ? 'warning' : 'destructive';
-  const approved = deal.margin_approved;
-
-  return (
-    <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/20">
-      <Badge variant={variant} className="text-[10px] px-1.5 py-0 font-mono">
-        GP: {gpValue.toFixed(1)}%
-      </Badge>
-      {approved === false && (
-        <span className="text-[10px] text-warning">⏳ Pending</span>
-      )}
-      {approved === true && (
-        <span className="text-[10px] text-success">✓ Approved</span>
-      )}
-    </div>
-  );
-}
-
-function MdfBadge({ deal }: { deal: DbVDeal }) {
-  if (!deal.mdf_eligible) return null;
-  const estAmount = deal.mdf_amount ? formatSGD(deal.mdf_amount) : 'TBD';
-  return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400 bg-amber-500/10">
-            🏷️ MDF
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          HP/Lenovo MDF eligible — est. {estAmount}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-function KanbanCardContent({ deal, isDragging, dragListeners }: { deal: DbVDeal; isDragging?: boolean; dragListeners?: any }) {
-  return (
-    <div className={cn('kanban-card group', isDragging && 'ring-2 ring-primary shadow-lg shadow-primary/20 rotate-1')}>
-      <div className="flex items-start gap-1.5">
-        <button
-          className="mt-0.5 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-grab active:cursor-grabbing transition-opacity flex-shrink-0 text-muted-foreground"
-          {...dragListeners}
-        >
-          <GripVertical className="h-3.5 w-3.5" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Link to={`/opportunity/${deal.id}`} className="text-sm font-medium leading-tight hover:text-primary transition-colors" onClick={e => isDragging && e.preventDefault()}>
-              {deal.title}
-            </Link>
-            <MdfBadge deal={deal} />
-          </div>
-          <p className="text-[11px] text-muted-foreground mb-2">{deal.account_name}</p>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-semibold sgd-value">{formatSGD(deal.value ?? 0)}</span>
-            <span className="text-[11px] text-muted-foreground font-mono">{Math.round((deal.win_probability ?? 0) * 100)}%</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">{deal.owner_name}</p>
-          <MarginIndicator deal={deal} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Table View ─── */
-
-function PipelineTable({ deals }: { deals: DbVDeal[] }) {
-  return (
-    <div className="data-panel overflow-x-auto p-0">
-      <table className="w-full table-compact">
-        <thead>
-          <tr>
-            <th className="text-left">Account</th>
-            <th className="text-left">Deal</th>
-            <th className="text-left">Stage</th>
-            <th className="text-left">Owner</th>
-            <th className="text-right">Value</th>
-            <th className="text-right">Win Prob</th>
-            <th className="text-right">Weighted</th>
-            <th className="text-right">GP%</th>
-            <th className="text-center">MDF</th>
-            <th className="text-left">Expected Close</th>
-          </tr>
-        </thead>
-        <tbody>
-          {deals.map(d => (
-            <tr key={d.id}>
-              <td className="font-medium">{d.account_name}</td>
-              <td>
-                <Link to={`/opportunity/${d.id}`} className="text-primary hover:underline">{d.title}</Link>
-              </td>
-              <td><StageBadge stage={(d.stage as Stage) || 'Prospect'} /></td>
-              <td className="text-muted-foreground">{d.owner_name}</td>
-              <td className="text-right sgd-value">{formatSGD(d.value ?? 0)}</td>
-              <td className="text-right font-mono text-muted-foreground">{Math.round((d.win_probability ?? 0) * 100)}%</td>
-              <td className="text-right sgd-value">{formatSGD((d.value ?? 0) * (d.win_probability ?? 0))}</td>
-              <td className="text-right font-mono text-muted-foreground">{d.gp_percent != null ? `${d.gp_percent.toFixed(1)}%` : '—'}</td>
-              <td className="text-center">{d.mdf_eligible ? <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400 bg-amber-500/10">🏷️ MDF</Badge> : '—'}</td>
-              <td className="text-muted-foreground text-xs">{d.expected_close_date || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
